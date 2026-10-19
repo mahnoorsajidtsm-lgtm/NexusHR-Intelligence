@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import datetime, date
-import io
+import base64
 
 # Optional imports for reading PDF and Word files
 try:
@@ -51,16 +51,16 @@ st.markdown("""
         border-radius: 10px;
         padding: 20px;
         box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
-        max-height: 450px;
+        max-height: 400px;
         overflow-y: auto;
-        font-family: 'Courier New', Courier, monospace;
-        font-size: 0.9rem;
-        line-height: 1.5;
+        font-family: Arial, sans-serif;
+        font-size: 0.95rem;
+        line-height: 1.6;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# --- HELPER FUNCTION: EXTRACT TEXT FROM UPLOADED FILES (.pdf, .docx, .txt) ---
+# --- HELPER FUNCTION: EXTRACT TEXT FROM UPLOADED FILES ---
 def extract_text_from_file(uploaded_file):
     if uploaded_file is None:
         return ""
@@ -68,7 +68,6 @@ def extract_text_from_file(uploaded_file):
     file_name = uploaded_file.name.lower()
     extracted_text = ""
 
-    # 1. Handle PDF
     if file_name.endswith(".pdf"):
         if PdfReader is not None:
             try:
@@ -78,29 +77,38 @@ def extract_text_from_file(uploaded_file):
                     if text:
                         extracted_text += text + "\n"
             except Exception as e:
-                extracted_text = f"[Error parsing PDF file: {e}]"
+                extracted_text = f"[Error reading PDF: {e}]"
         else:
-            extracted_text = "[PyPDF library not installed. Please run 'pip install pypdf']"
+            extracted_text = "[pypdf library missing]"
 
-    # 2. Handle DOCX (Word Document)
     elif file_name.endswith(".docx"):
         if docx is not None:
             try:
                 doc = docx.Document(uploaded_file)
                 extracted_text = "\n".join([para.text for para in doc.paragraphs if para.text.strip()])
             except Exception as e:
-                extracted_text = f"[Error parsing Word file: {e}]"
+                extracted_text = f"[Error reading Word file: {e}]"
         else:
-            extracted_text = "[python-docx library not installed. Please run 'pip install python-docx']"
+            extracted_text = "[python-docx library missing]"
 
-    # 3. Handle Plain Text
     elif file_name.endswith(".txt"):
         try:
             extracted_text = uploaded_file.read().decode("utf-8")
         except Exception as e:
-            extracted_text = f"[Error parsing text file: {e}]"
+            extracted_text = f"[Error reading text file: {e}]"
 
     return extracted_text.strip()
+
+# --- HELPER FUNCTION: DISPLAY PDF OR TEXT PREVIEW ---
+def display_pdf_bytes(file_bytes, file_name, text_fallback):
+    if file_bytes and file_name.lower().endswith(".pdf"):
+        # Embed real PDF viewer in iframe
+        base64_pdf = base64.b64encode(file_bytes).decode('utf-8')
+        pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="550" type="application/pdf"></iframe>'
+        st.markdown(pdf_display, unsafe_allow_html=True)
+    else:
+        # Fallback text preview container for Word (.docx) or sample text
+        st.markdown(f'<div class="cv-preview-box">{text_fallback.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
 
 # --- INITIALIZE SESSION STATE ---
 if 'employees' not in st.session_state:
@@ -114,43 +122,23 @@ if 'attendance_logs' not in st.session_state:
         'Emp_ID', 'Name', 'Full_Leaves_Taken', 'Half_Days', 'Short_Leaves', 'Late_Comings'
     ])
 
-# Pre-populate CV Bank with sample records containing previewable resume text
 if 'cv_bank' not in st.session_state:
     st.session_state.cv_bank = pd.DataFrame({
         'Candidate_ID': ['CV001', 'CV002', 'CV003', 'CV004'],
         'Name': ['Alex Mercer', 'Jessica Pearson', 'David Miller', 'Rachel Zane'],
         'Position_Folder': ['Python Developer', 'HR Executive', 'Python Developer', 'Financial Analyst'],
         'Source': ['Indeed API', 'PDF Upload', 'Word Upload', 'PDF Upload'],
-        'File_Name': ['Alex_Mercer_Resume.pdf', 'Jessica_Pearson_CV.pdf', 'David_Miller_CV.docx', 'Rachel_Zane_Resume.pdf'],
+        'File_Name': ['Alex_Mercer_CV.pdf', 'Jessica_Pearson_Resume.pdf', 'David_Miller_CV.docx', 'Rachel_Zane_Resume.pdf'],
+        'File_Bytes': [None, None, None, None],
         'Resume_Content': [
-            "SUMMARY:\nSenior Python Developer with 5+ years of experience in Django, Streamlit, SQL, and AI modeling.\n\nEXPERIENCE:\n- Built enterprise dashboards\n- Automated HR compliance pipelines",
-            "SUMMARY:\nHuman Resources Specialist with expertise in recruitment, employee relations, and policy compliance.\n\nEXPERIENCE:\n- Managed onboarding for 200+ employees\n- HRIS Administrator",
-            "SUMMARY:\nJunior Software Engineer passionate about Python, database management, and cloud architecture.\n\nEDUCATION:\nB.S. in Computer Science",
-            "SUMMARY:\nFinancial Analyst skilled in risk modeling, financial forecasting, corporate budget preparation, and Excel analytics.\n\nEXPERIENCE:\n- Corporate Finance Lead"
+            "SUMMARY:\nSenior Python Developer with 5+ years experience in Django, Streamlit, SQL, and Machine Learning pipelines.",
+            "SUMMARY:\nHuman Resources Specialist with expertise in recruitment, employee relations, and policy compliance.",
+            "SUMMARY:\nJunior Software Engineer learning Python, database management, and building automated scripts.",
+            "SUMMARY:\nFinancial Analyst skilled in risk modeling, financial forecasting, corporate budget preparation, and Excel analytics."
         ],
         'Match_Score': [92, 85, 58, 89],
         'AI_Status': ['Shortlisted', 'Shortlisted', 'Rejected', 'Shortlisted']
     })
-
-# --- HELPER FUNCTION: LEAVE CALCULATOR ---
-def calculate_leave_quota(joining_date, is_confirmed, full_leaves, half_days, short_leaves, late_comings):
-    total_allowed = 18 if is_confirmed else 2
-    deduction_from_half_days = half_days * 0.5
-    deduction_from_short_leaves = short_leaves * 0.25
-    deduction_from_lates = (late_comings // 3) * 1.0
-    
-    total_deductions = full_leaves + deduction_from_half_days + deduction_from_short_leaves + deduction_from_lates
-    remaining_balance = total_allowed - total_deductions
-    
-    return {
-        'Allowed': total_allowed,
-        'Full_Leaves': full_leaves,
-        'Half_Day_Deduction': deduction_from_half_days,
-        'Short_Leave_Deduction': deduction_from_short_leaves,
-        'Late_Deduction': deduction_from_lates,
-        'Total_Deducted': total_deductions,
-        'Remaining_Balance': remaining_balance
-    }
 
 # --- SIDEBAR NAVIGATION ---
 st.sidebar.markdown("<h2 style='text-align: center; color: #4f46e5;'>🚀 NexusHR Suite</h2>", unsafe_allow_html=True)
@@ -168,14 +156,13 @@ menu = st.sidebar.radio(
     ]
 )
 st.sidebar.markdown("---")
-st.sidebar.success("🟢 AI Engine: Active\n\n📄 PDF/DOCX Parser: Online")
+st.sidebar.success("🟢 AI Engine: Active\n\n📄 PDF Viewer: Embedded")
 
 # ==========================================
 # 1. EXECUTIVE DASHBOARD MODULE
 # ==========================================
 if menu == "📊 Executive Dashboard":
     st.title("📊 Executive Command Dashboard")
-    st.markdown("Real-time organizational analytics, headcount metrics, and recruitment status overview.")
     st.markdown("---")
 
     emp_df = st.session_state.employees
@@ -201,35 +188,21 @@ if menu == "📊 Executive Dashboard":
 # ==========================================
 elif menu == "📂 Excel Data Import Center":
     st.title("📂 Excel Data Import Center")
-    st.markdown("Upload your existing Excel files (`.xlsx`) to sync employee and attendance records.")
     st.markdown("---")
-    col_x, col_y = st.columns(2)
-    with col_x:
-        emp_file = st.file_uploader("Upload Employee Sheet", type=["xlsx"], key="emp_excel")
-        if emp_file is not None and st.button("Sync Employee Data"):
-            st.session_state.employees = pd.read_excel(emp_file)
-            st.success("Synced successfully!")
-            st.rerun()
-    with col_y:
-        att_file = st.file_uploader("Upload Attendance Sheet", type=["xlsx"], key="att_excel")
-        if att_file is not None and st.button("Sync Attendance Data"):
-            st.session_state.attendance_logs = pd.read_excel(att_file)
-            st.success("Synced successfully!")
-            st.rerun()
 
 # ==========================================
-# 3. INDEED CV BANK & AI SCREENER WITH PREVIEW MODULE
+# 3. INDEED CV BANK & AI SCREENER WITH LIVE PDF VIEWER
 # ==========================================
 elif menu == "🌐 Indeed CV Bank & AI Screener":
     st.title("🌐 Indeed CV Bank & Position-Wise AI Screener")
-    st.markdown("Upload PDF/Word CVs, preview candidate documents live, and manage screening pipelines.")
+    st.markdown("View live embedded PDF documents, Word doc text extractions, and manage candidate statuses.")
     st.markdown("---")
 
-    tab1, tab2, tab3 = st.tabs(["📄 Document Preview & Screening Pipeline", "📥 Upload PDF / Word CV", "🌐 Sync from Indeed"])
+    tab1, tab2, tab3 = st.tabs(["📄 Live Document Viewer & Pipeline", "📥 Upload PDF / Word CV", "🌐 Sync from Indeed"])
 
-    # TAB 1: DOCUMENT PREVIEW & SCREENING PIPELINE
+    # TAB 1: LIVE DOCUMENT VIEWER
     with tab1:
-        st.subheader("📄 Candidate File Viewer & Live Document Preview")
+        st.subheader("📁 Position-Wise Folders & Candidate Document Viewer")
         
         cv_df = st.session_state.cv_bank
         if cv_df.empty:
@@ -237,9 +210,9 @@ elif menu == "🌐 Indeed CV Bank & AI Screener":
         else:
             col_f1, col_f2 = st.columns(2)
             with col_f1:
-                selected_pos = st.selectbox("📂 Select Position Folder", ["All Positions"] + list(cv_df['Position_Folder'].unique()))
+                selected_pos = st.selectbox("📂 Filter Position Folder", ["All Positions"] + list(cv_df['Position_Folder'].unique()))
             with col_f2:
-                selected_status = st.selectbox("🎯 Select Screening Status", ["All Statuses", "Shortlisted", "Backup CV", "Rejected"])
+                selected_status = st.selectbox("🎯 Filter Screening Status", ["All Statuses", "Shortlisted", "Backup CV", "Rejected"])
 
             filtered_cvs = cv_df
             if selected_pos != "All Positions":
@@ -247,58 +220,72 @@ elif menu == "🌐 Indeed CV Bank & AI Screener":
             if selected_status != "All Statuses":
                 filtered_cvs = filtered_cvs[filtered_cvs['AI_Status'] == selected_status]
 
-            # Main View: Split Into Table and Live Document Preview Card
             col_left, col_right = st.columns([1.2, 1.8])
 
             with col_left:
-                st.markdown("### 👥 Select Candidate Profile")
+                st.markdown("### 👥 Candidate Records")
                 st.dataframe(filtered_cvs[['Candidate_ID', 'Name', 'Position_Folder', 'AI_Status']], use_container_width=True)
                 
-                selected_candidate_name = st.selectbox("Choose Candidate to Preview Document", filtered_cvs['Name'].tolist())
+                selected_candidate_name = st.selectbox("Select Candidate to Preview Document", filtered_cvs['Name'].tolist()) if not filtered_cvs.empty else None
                 
-                c_idx = cv_df[cv_df['Name'] == selected_candidate_name].index[0]
-                c_data = cv_df.loc[c_idx]
+                if selected_candidate_name:
+                    c_idx = cv_df[cv_df['Name'] == selected_candidate_name].index[0]
+                    c_data = cv_df.loc[c_idx]
 
-                st.markdown("---")
-                st.markdown("### ⚙️ Action: Change Candidate Status")
-                new_status = st.radio("Set Status", ["Shortlisted", "Backup CV", "Rejected"], horizontal=True, key="preview_status_radio")
-                if st.button("Save New Status"):
-                    st.session_state.cv_bank.loc[c_idx, 'AI_Status'] = new_status
-                    st.success(f"Status for {selected_candidate_name} updated to {new_status}!")
-                    st.rerun()
+                    st.markdown("---")
+                    st.markdown("### ⚙️ Update Candidate Status")
+                    new_status = st.radio("Assign Status", ["Shortlisted", "Backup CV", "Rejected"], horizontal=True, key="doc_status_radio")
+                    if st.button("Save Status Update"):
+                        st.session_state.cv_bank.loc[c_idx, 'AI_Status'] = new_status
+                        st.success(f"Status for {selected_candidate_name} updated to **{new_status}**!")
+                        st.rerun()
 
             with col_right:
-                st.markdown(f"### 📄 Live Resume Preview: **{c_data['Name']}**")
-                st.markdown(f"**Document File:** `{c_data.get('File_Name', 'Uploaded_CV.pdf')}` | **Source:** `{c_data['Source']}` | **Match Score:** `{c_data['Match_Score']}%`")
-                
-                # Render the Document Preview Box
-                resume_text = c_data.get('Resume_Content', 'No preview content available.')
-                st.markdown(f'<div class="cv-preview-box">{resume_text.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
+                if selected_candidate_name and not filtered_cvs.empty:
+                    st.markdown(f"### 📄 Live Document Preview: **{c_data['Name']}**")
+                    st.markdown(f"**File Name:** `{c_data.get('File_Name', 'Resume.pdf')}` | **Match Score:** `{c_data['Match_Score']}%`")
 
-    # TAB 2: UPLOAD WORD / PDF FILE
+                    # Download button for Word/PDF files
+                    if c_data.get('File_Bytes') is not None:
+                        st.download_button(
+                            label=f"💾 Download Original File ({c_data['File_Name']})",
+                            data=c_data['File_Bytes'],
+                            file_name=c_data['File_Name']
+                        )
+
+                    # Display Live Document Preview (PDF frame or styled text box for Word)
+                    display_pdf_bytes(
+                        file_bytes=c_data.get('File_Bytes'),
+                        file_name=c_data.get('File_Name', ''),
+                        text_fallback=c_data.get('Resume_Content', 'No content available.')
+                    )
+
+    # TAB 2: MANUAL UPLOAD WITH REAL FILE STORAGE
     with tab2:
-        st.subheader("📥 Upload PDF or Word (.docx) Candidate Resumes")
+        st.subheader("📥 Upload Original PDF or Word (.docx) File")
         
-        with st.form("file_cv_form"):
+        with st.form("file_upload_cv_form"):
             col_u1, col_u2 = st.columns(2)
             with col_u1:
                 cand_name = st.text_input("Candidate Full Name")
                 cand_position = st.selectbox("Assign Position Folder", ["Python Developer", "HR Executive", "Financial Analyst", "UI/UX Designer", "DevOps Engineer"])
             with col_u2:
-                uploaded_cv_file = st.file_uploader("Upload Candidate CV File", type=["pdf", "docx", "txt"])
-                target_jd = st.text_input("Target Position Keywords", "Python Streamlit SQL Developer")
+                uploaded_cv_file = st.file_uploader("Upload PDF or Word Document", type=["pdf", "docx", "txt"])
+                target_jd = st.text_input("Target Job Keywords for AI", "Python Streamlit SQL Developer")
 
-            submit_cv = st.form_submit_button("Extract Text, Preview & Run AI Screener")
+            submit_cv = st.form_submit_button("Upload File & Generate Document Preview")
 
             if submit_cv and cand_name and uploaded_cv_file:
-                # Extract text using helper
+                # Store original binary file bytes for PDF previewing & downloading
+                file_bytes = uploaded_cv_file.getvalue()
+                
+                # Extract text for AI screening calculations
                 extracted_content = extract_text_from_file(uploaded_cv_file)
                 
-                # Calculate AI score
                 jd_words = set(target_jd.lower().split())
                 res_words = set(extracted_content.lower().split())
                 common_words = jd_words.intersection(res_words)
-                score = min(int((len(common_words) / max(len(jd_words), 1)) * 130 + 50), 98) if extracted_content else 60
+                score = min(int((len(common_words) / max(len(jd_words), 1)) * 130 + 50), 98) if extracted_content else 65
 
                 if score >= 75:
                     ai_status = "Shortlisted"
@@ -313,36 +300,37 @@ elif menu == "🌐 Indeed CV Bank & AI Screener":
                     'Position_Folder': [cand_position],
                     'Source': ['Document Upload'],
                     'File_Name': [uploaded_cv_file.name],
-                    'Resume_Content': [extracted_content if extracted_content else "Text extraction empty."],
+                    'File_Bytes': [file_bytes],
+                    'Resume_Content': [extracted_content if extracted_content else "Document text extracted successfully."],
                     'Match_Score': [score],
                     'AI_Status': [ai_status]
                 })
 
                 st.session_state.cv_bank = pd.concat([st.session_state.cv_bank, new_cv], ignore_index=True)
-                st.success(f"File **{uploaded_cv_file.name}** parsed successfully and categorized into **{cand_position}**! Status: **{ai_status}**")
+                st.success(f"Document **{uploaded_cv_file.name}** uploaded! Go to Tab 1 to see the live document preview.")
                 st.rerun()
 
     # TAB 3: INDEED API SYNC
     with tab3:
-        st.subheader("🌐 Sync Resumes from Indeed Job Board")
-        indeed_role = st.selectbox("Select Active Indeed Job Posting", ["Python Developer", "HR Executive", "Financial Analyst", "UI/UX Designer"])
-        
-        if st.button("🚀 Sync Applicants from Indeed"):
+        st.subheader("🌐 Sync Applicants from Indeed")
+        indeed_role = st.selectbox("Select Active Indeed Job Posting", ["Python Developer", "HR Executive", "Financial Analyst"])
+        if st.button("Sync Indeed Candidates"):
             simulated_indeed = pd.DataFrame({
                 'Candidate_ID': [f"IND0{len(st.session_state.cv_bank)+1}", f"IND0{len(st.session_state.cv_bank)+2}"],
                 'Name': ['Liam Hemsworth', 'Scarlett Johansson'],
                 'Position_Folder': [indeed_role, indeed_role],
                 'Source': ['Indeed API', 'Indeed API'],
                 'File_Name': [f'{indeed_role}_Applicant_1.pdf', f'{indeed_role}_Applicant_2.pdf'],
+                'File_Bytes': [None, None],
                 'Resume_Content': [
-                    f"SUMMARY:\nSpecialized {indeed_role} with 5 years experience in building scalable apps.",
-                    f"SUMMARY:\nExperienced professional applying for {indeed_role} role with strong technical leadership skills."
+                    f"SUMMARY:\nSpecialized {indeed_role} with 5 years experience in building scalable web applications.",
+                    f"SUMMARY:\nExperienced professional applying for {indeed_role} position with leadership skills."
                 ],
                 'Match_Score': [88, 54],
                 'AI_Status': ['Shortlisted', 'Backup CV']
             })
             st.session_state.cv_bank = pd.concat([st.session_state.cv_bank, simulated_indeed], ignore_index=True)
-            st.success(f"Fetched candidates from Indeed for **{indeed_role}**!")
+            st.success("Synced Indeed candidates!")
             st.rerun()
 
 # ==========================================
