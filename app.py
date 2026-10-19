@@ -51,7 +51,7 @@ st.markdown("""
         border-radius: 10px;
         padding: 20px;
         box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
-        max-height: 400px;
+        max-height: 450px;
         overflow-y: auto;
         font-family: Arial, sans-serif;
         font-size: 0.95rem;
@@ -79,7 +79,7 @@ def extract_text_from_file(uploaded_file):
             except Exception as e:
                 extracted_text = f"[Error reading PDF: {e}]"
         else:
-            extracted_text = "[pypdf library missing]"
+            extracted_text = "[pypdf package missing]"
 
     elif file_name.endswith(".docx"):
         if docx is not None:
@@ -89,7 +89,7 @@ def extract_text_from_file(uploaded_file):
             except Exception as e:
                 extracted_text = f"[Error reading Word file: {e}]"
         else:
-            extracted_text = "[python-docx library missing]"
+            extracted_text = "[python-docx package missing]"
 
     elif file_name.endswith(".txt"):
         try:
@@ -102,12 +102,10 @@ def extract_text_from_file(uploaded_file):
 # --- HELPER FUNCTION: DISPLAY PDF OR TEXT PREVIEW ---
 def display_pdf_bytes(file_bytes, file_name, text_fallback):
     if file_bytes and file_name.lower().endswith(".pdf"):
-        # Embed real PDF viewer in iframe
         base64_pdf = base64.b64encode(file_bytes).decode('utf-8')
         pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="550" type="application/pdf"></iframe>'
         st.markdown(pdf_display, unsafe_allow_html=True)
     else:
-        # Fallback text preview container for Word (.docx) or sample text
         st.markdown(f'<div class="cv-preview-box">{text_fallback.replace("\n", "<br>")}</div>', unsafe_allow_html=True)
 
 # --- INITIALIZE SESSION STATE ---
@@ -156,13 +154,14 @@ menu = st.sidebar.radio(
     ]
 )
 st.sidebar.markdown("---")
-st.sidebar.success("🟢 AI Engine: Active\n\n📄 PDF Viewer: Embedded")
+st.sidebar.success("🟢 AI Engine: Active\n\n📄 Excel & PDF Engine: Online")
 
 # ==========================================
 # 1. EXECUTIVE DASHBOARD MODULE
 # ==========================================
 if menu == "📊 Executive Dashboard":
     st.title("📊 Executive Command Dashboard")
+    st.markdown("Real-time organizational analytics and recruitment pipeline overview.")
     st.markdown("---")
 
     emp_df = st.session_state.employees
@@ -184,14 +183,53 @@ if menu == "📊 Executive Dashboard":
         st.plotly_chart(fig_folders, use_container_width=True)
 
 # ==========================================
-# 2. EXCEL DATA IMPORT CENTER
+# 2. EXCEL DATA IMPORT CENTER (FULLY RESTORED)
 # ==========================================
 elif menu == "📂 Excel Data Import Center":
     st.title("📂 Excel Data Import Center")
+    st.markdown("Upload your existing Excel spreadsheets (`.xlsx`) to sync employee and attendance records.")
     st.markdown("---")
 
+    col_x, col_y = st.columns(2)
+
+    with col_x:
+        st.subheader("1. Import Employee Directory Sheet")
+        st.caption("Excel file should contain: `Emp_ID`, `Name`, `Department`, `Role`, `Salary`, `Is_Confirmed`")
+        emp_file = st.file_uploader("Upload Employee Sheet (.xlsx)", type=["xlsx", "xls"], key="emp_excel_import")
+
+        if emp_file is not None:
+            try:
+                uploaded_emp_df = pd.read_excel(emp_file)
+                st.write("Preview of Uploaded Data:")
+                st.dataframe(uploaded_emp_df.head(), use_container_width=True)
+
+                if st.button("Sync Employee Directory Data"):
+                    st.session_state.employees = uploaded_emp_df
+                    st.success("Employee directory updated successfully from Excel!")
+                    st.rerun()
+            except Exception as e:
+                st.error(f"Error reading Excel file: {e}")
+
+    with col_y:
+        st.subheader("2. Import Attendance & Leave Sheet")
+        st.caption("Excel file should contain: `Emp_ID`, `Name`, `Full_Leaves_Taken`, `Half_Days`, `Short_Leaves`, `Late_Comings`")
+        att_file = st.file_uploader("Upload Attendance Sheet (.xlsx)", type=["xlsx", "xls"], key="att_excel_import")
+
+        if att_file is not None:
+            try:
+                uploaded_att_df = pd.read_excel(att_file)
+                st.write("Preview of Uploaded Data:")
+                st.dataframe(uploaded_att_df.head(), use_container_width=True)
+
+                if st.button("Sync Attendance & Leave Data"):
+                    st.session_state.attendance_logs = uploaded_att_df
+                    st.success("Attendance logs updated successfully from Excel!")
+                    st.rerun()
+            except Exception as e:
+                st.error(f"Error reading Excel file: {e}")
+
 # ==========================================
-# 3. INDEED CV BANK & AI SCREENER WITH LIVE PDF VIEWER
+# 3. INDEED CV BANK & AI SCREENER WITH LIVE DOCUMENT PREVIEW
 # ==========================================
 elif menu == "🌐 Indeed CV Bank & AI Screener":
     st.title("🌐 Indeed CV Bank & Position-Wise AI Screener")
@@ -245,7 +283,6 @@ elif menu == "🌐 Indeed CV Bank & AI Screener":
                     st.markdown(f"### 📄 Live Document Preview: **{c_data['Name']}**")
                     st.markdown(f"**File Name:** `{c_data.get('File_Name', 'Resume.pdf')}` | **Match Score:** `{c_data['Match_Score']}%`")
 
-                    # Download button for Word/PDF files
                     if c_data.get('File_Bytes') is not None:
                         st.download_button(
                             label=f"💾 Download Original File ({c_data['File_Name']})",
@@ -253,14 +290,13 @@ elif menu == "🌐 Indeed CV Bank & AI Screener":
                             file_name=c_data['File_Name']
                         )
 
-                    # Display Live Document Preview (PDF frame or styled text box for Word)
                     display_pdf_bytes(
                         file_bytes=c_data.get('File_Bytes'),
                         file_name=c_data.get('File_Name', ''),
                         text_fallback=c_data.get('Resume_Content', 'No content available.')
                     )
 
-    # TAB 2: MANUAL UPLOAD WITH REAL FILE STORAGE
+    # TAB 2: MANUAL UPLOAD
     with tab2:
         st.subheader("📥 Upload Original PDF or Word (.docx) File")
         
@@ -276,10 +312,7 @@ elif menu == "🌐 Indeed CV Bank & AI Screener":
             submit_cv = st.form_submit_button("Upload File & Generate Document Preview")
 
             if submit_cv and cand_name and uploaded_cv_file:
-                # Store original binary file bytes for PDF previewing & downloading
                 file_bytes = uploaded_cv_file.getvalue()
-                
-                # Extract text for AI screening calculations
                 extracted_content = extract_text_from_file(uploaded_cv_file)
                 
                 jd_words = set(target_jd.lower().split())
@@ -307,7 +340,7 @@ elif menu == "🌐 Indeed CV Bank & AI Screener":
                 })
 
                 st.session_state.cv_bank = pd.concat([st.session_state.cv_bank, new_cv], ignore_index=True)
-                st.success(f"Document **{uploaded_cv_file.name}** uploaded! Go to Tab 1 to see the live document preview.")
+                st.success(f"Document **{uploaded_cv_file.name}** uploaded! Check Tab 1 to view document preview.")
                 st.rerun()
 
     # TAB 3: INDEED API SYNC
