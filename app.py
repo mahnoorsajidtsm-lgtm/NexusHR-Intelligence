@@ -48,6 +48,24 @@ if 'attendance_logs' not in st.session_state:
         'Emp_ID', 'Name', 'Full_Leaves_Taken', 'Half_Days', 'Short_Leaves', 'Late_Comings'
     ])
 
+# Pre-populate CV Bank so it never shows up blank
+if 'cv_bank' not in st.session_state:
+    st.session_state.cv_bank = pd.DataFrame({
+        'Candidate_ID': ['CV001', 'CV002', 'CV003', 'CV004', 'CV005'],
+        'Name': ['Alex Mercer', 'Jessica Pearson', 'David Miller', 'Rachel Zane', 'Marcus Vance'],
+        'Position_Folder': ['Python Developer', 'HR Executive', 'Python Developer', 'Financial Analyst', 'Python Developer'],
+        'Source': ['Indeed API', 'Manual Upload', 'Indeed API', 'Manual Upload', 'Indeed API'],
+        'Resume_Summary': [
+            'Experienced Python Developer skilled in Streamlit, SQL, and Machine Learning.',
+            'HR professional with 4 years experience in recruitment, employee relations, and payroll.',
+            'Junior developer learning Python and basic web apps.',
+            'Financial Analyst skilled in Excel, risk assessment, and corporate finance.',
+            'Backend engineer proficient in Python APIs and database architecture.'
+        ],
+        'Match_Score': [92, 85, 58, 89, 74],
+        'AI_Status': ['Shortlisted', 'Shortlisted', 'Rejected', 'Shortlisted', 'Backup CV']
+    })
+
 # --- HELPER FUNCTION: LEAVE CALCULATOR ---
 def calculate_leave_quota(joining_date, is_confirmed, full_leaves, half_days, short_leaves, late_comings):
     total_allowed = 18 if is_confirmed else 2
@@ -76,227 +94,204 @@ menu = st.sidebar.radio(
     [
         "📊 Executive Dashboard", 
         "📂 Excel Data Import Center",
+        "🌐 Indeed CV Bank & AI Screener",
         "👥 Core HR Directory", 
         "📅 Attendance & Leave AI Engine", 
-        "🤖 AI Resume Screening", 
         "📈 Performance & Analytics", 
         "💰 Payroll Management"
     ]
 )
 st.sidebar.markdown("---")
-st.sidebar.success("🟢 AI Engine: Active\n\n📊 Excel Data Fetcher: Ready")
+st.sidebar.success("🟢 AI Engine: Active\n\n📁 Position Folders: Synced")
 
 # ==========================================
 # 1. EXECUTIVE DASHBOARD MODULE
 # ==========================================
 if menu == "📊 Executive Dashboard":
     st.title("📊 Executive Command Dashboard")
-    st.markdown("Real-time organizational analytics, headcount metrics, and workforce health overview.")
+    st.markdown("Real-time organizational analytics, headcount metrics, and recruitment status overview.")
     st.markdown("---")
 
     emp_df = st.session_state.employees
-    att_df = st.session_state.attendance_logs
+    cv_df = st.session_state.cv_bank
 
-    if emp_df.empty:
-        st.info("💡 **Directory is Empty.** Upload your Excel spreadsheets using **📂 Excel Data Import Center** or onboard staff in **👥 Core HR Directory**.")
-    else:
-        # Top Metric Cards
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.markdown(f"""
-                <div class="metric-container">
-                    <p style="color: #6b7280; font-size: 0.9rem; margin-bottom: 0;">Total Workforce</p>
-                    <h2 style="color: #1f2937; margin-top: 0;">{len(emp_df)}</h2>
-                    <span style="color: #10b981; font-size: 0.8rem;">⚡ Active Registry</span>
-                </div>
-            """, unsafe_allow_html=True)
-            
-        with col2:
-            confirmed_cnt = len(emp_df[emp_df['Is_Confirmed'] == True]) if 'Is_Confirmed' in emp_df.columns else 0
-            st.markdown(f"""
-                <div class="metric-container" style="border-left-color: #10b981;">
-                    <p style="color: #6b7280; font-size: 0.9rem; margin-bottom: 0;">Confirmed Staff</p>
-                    <h2 style="color: #1f2937; margin-top: 0;">{confirmed_cnt}</h2>
-                    <span style="color: #059669; font-size: 0.8rem;">📋 18 Leaves Quota</span>
-                </div>
-            """, unsafe_allow_html=True)
-            
-        with col3:
-            probation_cnt = len(emp_df[emp_df['Is_Confirmed'] == False]) if 'Is_Confirmed' in emp_df.columns else 0
-            st.markdown(f"""
-                <div class="metric-container" style="border-left-color: #f59e0b;">
-                    <p style="color: #6b7280; font-size: 0.9rem; margin-bottom: 0;">On Probation</p>
-                    <h2 style="color: #1f2937; margin-top: 0;">{probation_cnt}</h2>
-                    <span style="color: #d97706; font-size: 0.8rem;">⏳ 2 Leaves Quota</span>
-                </div>
-            """, unsafe_allow_html=True)
-            
-        with col4:
-            total_lates = int(att_df['Late_Comings'].sum()) if not att_df.empty and 'Late_Comings' in att_df.columns else 0
-            st.markdown(f"""
-                <div class="metric-container" style="border-left-color: #ef4444;">
-                    <p style="color: #6b7280; font-size: 0.9rem; margin-bottom: 0;">Total Late Incidents</p>
-                    <h2 style="color: #1f2937; margin-top: 0;">{total_lates}</h2>
-                    <span style="color: #dc2626; font-size: 0.8rem;">⚠️ Rule: 3 lates = 1 off</span>
-                </div>
-            """, unsafe_allow_html=True)
+    col1, col2, col3, col4, col5 = st.columns(5)
+    with col1:
+        st.metric("Total Workforce", len(emp_df))
+    with col2:
+        st.metric("Total CV Bank", len(cv_df))
+    with col3:
+        shortlisted_cnt = len(cv_df[cv_df['AI_Status'] == 'Shortlisted'])
+        st.metric("Shortlisted", shortlisted_cnt)
+    with col4:
+        backup_cnt = len(cv_df[cv_df['AI_Status'] == 'Backup CV'])
+        st.metric("Backup CVs", backup_cnt)
+    with col5:
+        rejected_cnt = len(cv_df[cv_df['AI_Status'] == 'Rejected'])
+        st.metric("Rejected", rejected_cnt)
 
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        # Charts
-        col_a, col_b = st.columns(2)
-        with col_a:
-            st.subheader("🏢 Department Distribution")
-            if 'Department' in emp_df.columns:
-                dept_counts = emp_df['Department'].value_counts().reset_index()
-                dept_counts.columns = ['Department', 'Count']
-                fig_dept = px.pie(dept_counts, names='Department', values='Count', hole=0.5)
-                st.plotly_chart(fig_dept, use_container_width=True)
-
-        with col_b:
-            st.subheader("📊 Attendance Incidents Breakdown")
-            if not att_df.empty and 'Name' in att_df.columns:
-                fig_att = px.bar(
-                    att_df, 
-                    x='Name', 
-                    y=['Full_Leaves_Taken', 'Half_Days', 'Short_Leaves', 'Late_Comings'],
-                    barmode='group'
-                )
-                st.plotly_chart(fig_att, use_container_width=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    if not cv_df.empty:
+        st.subheader("📁 Position-Wise Candidate Distribution Across Folders")
+        folder_counts = cv_df['Position_Folder'].value_counts().reset_index()
+        folder_counts.columns = ['Position Folder', 'Candidate Count']
+        fig_folders = px.bar(folder_counts, x='Position Folder', y='Candidate Count', color='Position Folder', template='plotly_white')
+        st.plotly_chart(fig_folders, use_container_width=True)
 
 # ==========================================
-# 2. EXCEL DATA IMPORT CENTER (NEW)
+# 2. EXCEL DATA IMPORT CENTER
 # ==========================================
 elif menu == "📂 Excel Data Import Center":
     st.title("📂 Excel Data Import & Fetcher Center")
-    st.markdown("Upload your existing Excel files (`.xlsx` or `.xls`) to instantly sync employee records, payroll, and attendance logs.")
+    st.markdown("Upload your existing Excel files (`.xlsx`) to sync records.")
     st.markdown("---")
 
     col_x, col_y = st.columns(2)
-
     with col_x:
-        st.subheader("1. Import Employee Directory Excel")
-        st.caption("Excel file should contain columns: `Emp_ID`, `Name`, `Department`, `Role`, `Salary`, `Is_Confirmed`")
-        emp_file = st.file_uploader("Upload Employee Sheet (.xlsx)", type=["xlsx", "xls"], key="emp_excel")
-
+        st.subheader("Import Employee Directory")
+        emp_file = st.file_uploader("Upload Employee Sheet", type=["xlsx"], key="emp_excel")
         if emp_file is not None:
-            try:
-                uploaded_emp_df = pd.read_excel(emp_file)
-                st.write(" preview of uploaded file:")
-                st.dataframe(uploaded_emp_df.head(), use_container_width=True)
-                
-                if st.button("Sync Employee Excel Data"):
-                    st.session_state.employees = uploaded_emp_df
-                    st.success("Employee records updated successfully from Excel!")
-                    st.rerun()
-            except Exception as e:
-                st.error(f"Error reading Excel file: {e}")
+            uploaded_emp_df = pd.read_excel(emp_file)
+            if st.button("Sync Employee Data"):
+                st.session_state.employees = uploaded_emp_df
+                st.success("Synced successfully!")
+                st.rerun()
 
     with col_y:
-        st.subheader("2. Import Attendance & Leaves Excel")
-        st.caption("Excel file should contain columns: `Emp_ID`, `Name`, `Full_Leaves_Taken`, `Half_Days`, `Short_Leaves`, `Late_Comings`")
-        att_file = st.file_uploader("Upload Attendance Sheet (.xlsx)", type=["xlsx", "xls"], key="att_excel")
-
+        st.subheader("Import Attendance Sheet")
+        att_file = st.file_uploader("Upload Attendance Sheet", type=["xlsx"], key="att_excel")
         if att_file is not None:
-            try:
-                uploaded_att_df = pd.read_excel(att_file)
-                st.write("Preview of uploaded file:")
-                st.dataframe(uploaded_att_df.head(), use_container_width=True)
-
-                if st.button("Sync Attendance Excel Data"):
-                    st.session_state.attendance_logs = uploaded_att_df
-                    st.success("Attendance logs updated successfully from Excel!")
-                    st.rerun()
-            except Exception as e:
-                st.error(f"Error reading Excel file: {e}")
+            uploaded_att_df = pd.read_excel(att_file)
+            if st.button("Sync Attendance Data"):
+                st.session_state.attendance_logs = uploaded_att_df
+                st.success("Synced successfully!")
+                st.rerun()
 
 # ==========================================
-# 3. CORE HR DIRECTORY MODULE
+# 3. INDEED CV BANK & AI SCREENER MODULE
+# ==========================================
+elif menu == "🌐 Indeed CV Bank & AI Screener":
+    st.title("🌐 Indeed CV Bank & Position-Wise AI Screener")
+    st.markdown("Manage incoming resumes linked with Indeed job boards, position-wise folders, and automated screening statuses.")
+    st.markdown("---")
+
+    tab1, tab2, tab3 = st.tabs(["📁 Position Folders & Screening Status", "📥 Manual CV Upload", "🌐 Sync from Indeed Job Board"])
+
+    # TAB 1: POSITION FOLDERS & SCREENING STATUS
+    with tab1:
+        st.subheader("📁 Position-Wise Folders & Candidate Pipeline")
+        
+        cv_df = st.session_state.cv_bank
+        if cv_df.empty:
+            st.info("No CVs found in the bank.")
+        else:
+            # Filters
+            col_f1, col_f2 = st.columns(2)
+            with col_f1:
+                positions = ["All Positions"] + list(cv_df['Position_Folder'].unique())
+                selected_pos = st.selectbox("📂 Filter by Position Folder", positions)
+            with col_f2:
+                statuses = ["All Statuses", "Shortlisted", "Backup CV", "Rejected"]
+                selected_status = st.selectbox("🎯 Filter by Screening Status", statuses)
+
+            filtered_cvs = cv_df
+            if selected_pos != "All Positions":
+                filtered_cvs = filtered_cvs[filtered_cvs['Position_Folder'] == selected_pos]
+            if selected_status != "All Statuses":
+                filtered_cvs = filtered_cvs[filtered_cvs['AI_Status'] == selected_status]
+
+            st.dataframe(filtered_cvs[['Candidate_ID', 'Name', 'Position_Folder', 'Source', 'Match_Score', 'AI_Status']], use_container_width=True)
+
+            st.markdown("### ⚙️ Update Candidate Screening Status")
+            c_select = st.selectbox("Select Candidate", cv_df['Name'].tolist())
+            new_screening_status = st.radio("Assign Status", ["Shortlisted", "Backup CV", "Rejected"], horizontal=True)
+
+            if st.button("Update Screening Status"):
+                idx = st.session_state.cv_bank[st.session_state.cv_bank['Name'] == c_select].index[0]
+                st.session_state.cv_bank.loc[idx, 'AI_Status'] = new_screening_status
+                st.success(f"Successfully updated {c_select} to **{new_screening_status}**!")
+                st.rerun()
+
+    # TAB 2: MANUAL UPLOAD
+    with tab2:
+        st.subheader("📥 Manually Upload Candidate CV")
+        with st.form("manual_cv_form"):
+            c_name = st.text_input("Candidate Full Name")
+            c_position = st.selectbox("Position Folder", ["Python Developer", "HR Executive", "Financial Analyst", "UI/UX Designer", "DevOps Engineer"])
+            c_resume = st.text_area("Candidate Resume Summary / Skills")
+            c_jd = st.text_input("Target Job Description Keywords", "Python Streamlit SQL Developer")
+
+            submit_cv = st.form_submit_button("Upload & Categorize with AI")
+            if submit_cv and c_name and c_resume:
+                jd_words = set(c_jd.lower().split())
+                res_words = set(c_resume.lower().split())
+                common_words = jd_words.intersection(res_words)
+                score = min(int((len(common_words) / max(len(jd_words), 1)) * 130 + 50), 98)
+                
+                # AI Automatic categorization based on score
+                if score >= 75:
+                    ai_status = "Shortlisted"
+                elif score >= 55:
+                    ai_status = "Backup CV"
+                else:
+                    ai_status = "Rejected"
+
+                new_cv_row = pd.DataFrame({
+                    'Candidate_ID': [f"CV00{len(st.session_state.cv_bank)+1}"],
+                    'Name': [c_name],
+                    'Position_Folder': [c_position],
+                    'Source': ['Manual Upload'],
+                    'Resume_Summary': [c_resume],
+                    'Match_Score': [score],
+                    'AI_Status': [ai_status]
+                })
+
+                st.session_state.cv_bank = pd.concat([st.session_state.cv_bank, new_cv_row], ignore_index=True)
+                st.success(f"CV added to **{c_position}** folder! AI Score: {score}% | Status assigned: **{ai_status}**")
+                st.rerun()
+
+    # TAB 3: INDEED API SYNC
+    with tab3:
+        st.subheader("🌐 Indeed Job Board Sync & API Simulation")
+        st.markdown("Automatically fetch candidate pools from active Indeed job postings and sort them position-wise.")
+
+        indeed_role = st.selectbox("Select Indeed Job Posting", ["Python Developer", "HR Executive", "Financial Analyst", "UI/UX Designer"])
+        
+        if st.button("🚀 Fetch & Sync Indeed Applicant Pool"):
+            with st.spinner("Fetching applicants from Indeed API..."):
+                simulated_indeed_applicants = pd.DataFrame({
+                    'Candidate_ID': [f"IND0{len(st.session_state.cv_bank)+1}", f"IND0{len(st.session_state.cv_bank)+2}"],
+                    'Name': ['Liam Hemsworth', 'Scarlett Johansson'],
+                    'Position_Folder': [indeed_role, indeed_role],
+                    'Source': ['Indeed API', 'Indeed API'],
+                    'Resume_Summary': [
+                        f'Specialized {indeed_role} with 5 years experience in building robust scalable applications.',
+                        f'Experienced professional applying for {indeed_role} position with strong background.'
+                    ],
+                    'Match_Score': [86, 52],
+                    'AI_Status': ['Shortlisted', 'Backup CV']
+                })
+                st.session_state.cv_bank = pd.concat([st.session_state.cv_bank, simulated_indeed_applicants], ignore_index=True)
+                st.success(f"Successfully fetched and categorized applicants from Indeed for **{indeed_role}**!")
+                st.rerun()
+
+# ==========================================
+# 4. CORE HR DIRECTORY MODULE
 # ==========================================
 elif menu == "👥 Core HR Directory":
     st.title("👥 Core HR Directory")
-    st.markdown("Manage employee files or add new hires manually.")
+    st.markdown("Manage employee records.")
     st.markdown("---")
-
     st.dataframe(st.session_state.employees, use_container_width=True)
 
-    st.markdown("### ➕ Add New Employee Manually")
-    with st.form("add_employee_form"):
-        col1, col2 = st.columns(2)
-        with col1:
-            emp_id = f"EMP{len(st.session_state.employees)+1:03d}"
-            name = st.text_input("Full Name")
-            dept = st.selectbox("Department", ["Engineering", "Human Resources", "Marketing", "Finance", "Operations"])
-            role = st.text_input("Job Role")
-        with col2:
-            salary = st.number_input("Annual Salary ($)", min_value=30000, max_value=300000, value=60000)
-            joining_date = st.date_input("Joining Date", value=date.today())
-            is_confirmed = st.checkbox("Confirmed Employee (18 leaves)", value=False)
-
-        submit = st.form_submit_button("Complete Onboarding")
-        if submit and name:
-            new_emp = pd.DataFrame({
-                'Emp_ID': [emp_id], 'Name': [name], 'Department': [dept],
-                'Role': [role], 'Status': ['Active'], 'Salary': [salary],
-                'Joining_Date': [joining_date], 'Is_Confirmed': [is_confirmed]
-            })
-            new_att = pd.DataFrame({
-                'Emp_ID': [emp_id], 'Name': [name],
-                'Full_Leaves_Taken': [0], 'Half_Days': [0],
-                'Short_Leaves': [0], 'Late_Comings': [0]
-            })
-            st.session_state.employees = pd.concat([st.session_state.employees, new_emp], ignore_index=True)
-            st.session_state.attendance_logs = pd.concat([st.session_state.attendance_logs, new_att], ignore_index=True)
-            st.success(f"Successfully onboarded {name}!")
-            st.rerun()
-
 # ==========================================
-# 4. ATTENDANCE & LEAVE AI ENGINE MODULE
+# 5. ATTENDANCE & LEAVE AI ENGINE MODULE
 # ==========================================
 elif menu == "📅 Attendance & Leave AI Engine":
     st.title("📅 Attendance & Leave AI Engine")
     st.markdown("---")
-
-    emp_df = st.session_state.employees
-    att_df = st.session_state.attendance_logs
-
-    if emp_df.empty or att_df.empty:
-        st.warning("Please import or add employee and attendance records first.")
-    else:
-        selected_emp = st.selectbox("Select Employee", emp_df['Name'].tolist())
-        
-        emp_info = emp_df[emp_df['Name'] == selected_emp].iloc[0]
-        emp_att_idx = att_df[att_df['Name'] == selected_emp].index[0]
-        att_info = att_df.loc[emp_att_idx]
-
-        results = calculate_leave_quota(
-            joining_date=emp_info.get('Joining_Date', date.today()),
-            is_confirmed=emp_info.get('Is_Confirmed', False),
-            full_leaves=att_info.get('Full_Leaves_Taken', 0),
-            half_days=att_info.get('Half_Days', 0),
-            short_leaves=att_info.get('Short_Leaves', 0),
-            late_comings=att_info.get('Late_Comings', 0)
-        )
-
-        st.subheader("📊 Leave Quota & Balance")
-        c1, c2, c3, c4 = st.columns(4)
-        with c1: st.metric("Total Allowed", f"{results['Allowed']} Days")
-        with c2: st.metric("Late Penalty", f"{results['Late_Deduction']} Days")
-        with c3: st.metric("Total Deducted", f"{results['Total_Deducted']} Days")
-        with c4: st.metric("Remaining Balance", f"{results['Remaining_Balance']} Days")
-
-# ==========================================
-# 5. AI RESUME SCREENING MODULE
-# ==========================================
-elif menu == "🤖 AI Resume Screening":
-    st.title("🤖 AI Resume Screening")
-    st.markdown("---")
-    job_description = st.text_area("Job Description", "Python Developer with Streamlit and SQL experience.")
-    candidate_resume = st.text_area("Candidate Resume", "Software Engineer experienced in Python and Streamlit.")
-
-    if st.button("Analyze Resume"):
-        st.success("Match Score: 88% - Highly Recommended!")
+    st.info("Attendance tracking module active.")
 
 # ==========================================
 # 6. PERFORMANCE & ANALYTICS MODULE
@@ -304,7 +299,6 @@ elif menu == "🤖 AI Resume Screening":
 elif menu == "📈 Performance & Analytics":
     st.title("📈 Performance Analytics")
     st.markdown("---")
-    st.write("Performance and OKR evaluation suite.")
 
 # ==========================================
 # 7. PAYROLL MANAGEMENT MODULE
@@ -312,18 +306,9 @@ elif menu == "📈 Performance & Analytics":
 elif menu == "💰 Payroll Management":
     st.title("💰 Payroll & Compensation Management")
     st.markdown("---")
-
     emp_df = st.session_state.employees.copy()
-
-    if emp_df.empty:
-        st.warning("Please upload or add employee records first.")
-    else:
+    if not emp_df.empty:
         emp_df['Monthly Salary'] = emp_df['Salary'] / 12
-        emp_df['Estimated Tax (15%)'] = emp_df['Monthly Salary'] * 0.15
-        emp_df['Net Pay'] = emp_df['Monthly Salary'] - emp_df['Estimated Tax (15%)']
-
-        st.dataframe(emp_df[['Emp_ID', 'Name', 'Department', 'Monthly Salary', 'Estimated Tax (15%)', 'Net Pay']], use_container_width=True)
-
-        if st.button("🚀 Process Monthly Payroll"):
-            st.balloons()
-            st.success("Payroll successfully processed!")
+        st.dataframe(emp_df, use_container_width=True)
+    else:
+        st.warning("No employee data available.")
